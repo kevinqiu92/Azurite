@@ -129,13 +129,15 @@ def parseJson():
 
 						# Populate node's properties.
 						# Get the VM's private and public IP configuration.
-						for vmNetworkIpConfiguration in subnetItem['vmNetworkConfiguration']['vmNetworkConfigurationIpConfigurations']:
+						try:
+							for vmNetworkIpConfiguration in subnetItem['vmNetworkConfiguration']['vmNetworkConfigurationIpConfigurations']:
 
-							vmPrivateIpAddresses.append(vmNetworkIpConfiguration['vmNetworkConfigurationPrivateIpAddress'] + ' (' + vmNetworkIpConfiguration['vmNetworkConfigurationName'] + ')')
+								vmPrivateIpAddresses.append(vmNetworkIpConfiguration['vmNetworkConfigurationPrivateIpAddress'] + ' (' + vmNetworkIpConfiguration['vmNetworkConfigurationName'] + ')')
 
-							if 'vmNetworkConfigurationPublicIpAddress' in vmNetworkIpConfiguration:
-								vmPublicIpAddresses.append(vmNetworkIpConfiguration['vmNetworkConfigurationPublicIpAddress'] + ' (' + vmNetworkIpConfiguration['vmNetworkConfigurationName'] + ')')
-
+								if 'vmNetworkConfigurationPublicIpAddress' in vmNetworkIpConfiguration:
+									vmPublicIpAddresses.append(vmNetworkIpConfiguration['vmNetworkConfigurationPublicIpAddress'] + ' (' + vmNetworkIpConfiguration['vmNetworkConfigurationName'] + ')')
+						except (KeyError, TypeError) as e:
+							pass
 						subnetItemProperties['privateIpAddress'] = ', '.join(vmPrivateIpAddresses)
 						if vmPublicIpAddresses:
 							subnetItemProperties['publicIpAddress'] = ', '.join(vmPublicIpAddresses)
@@ -388,14 +390,15 @@ def parseNetworkSecurityGroups(jsonNetworkSecurityGroups, subnetNetworkSecurityG
 	# In case the NSGs for the Subnet of the associated VM are weak, perform checks on the VM's NSGs.
 	# Otherwise the perimeter is considered secure.
 	if subnetNetworkSecurityGroupCustomRulesStatus == 'Weak' and 'vmNICNetworkSecurityGroupCustomRules' in jsonNetworkSecurityGroups:
-		for vmNetworkSecurityGroupCustomRule in jsonNetworkSecurityGroups['vmNICNetworkSecurityGroupCustomRules']:
-			# Only the NSG rules that have been successfuly provisioned are reviewed.
-			if vmNetworkSecurityGroupCustomRule['ProvisioningState'] == 'Succeeded':
-				if vmNetworkSecurityGroupCustomRule['Direction'] == 'Inbound' and vmNetworkSecurityGroupCustomRule['Access'] == 'Allow' and (
-					(vmNetworkSecurityGroupCustomRule['DestinationPortRange'] in managementPorts) or (vmNetworkSecurityGroupCustomRule['SourceAddressPrefix'] == '*' and vmNetworkSecurityGroupCustomRule['DestinationAddressPrefix'] == '*') or (vmNetworkSecurityGroupCustomRule['DestinationPortRange'] == '*')):
+		if jsonNetworkSecurityGroups['vmNICNetworkSecurityGroupCustomRules'] is not None:
+			for vmNetworkSecurityGroupCustomRule in jsonNetworkSecurityGroups['vmNICNetworkSecurityGroupCustomRules']:
+				# Only the NSG rules that have been successfuly provisioned are reviewed.
+				if vmNetworkSecurityGroupCustomRule['ProvisioningState'] == 'Succeeded':
+					if vmNetworkSecurityGroupCustomRule['Direction'] == 'Inbound' and vmNetworkSecurityGroupCustomRule['Access'] == 'Allow' and (
+						(vmNetworkSecurityGroupCustomRule['DestinationPortRange'] in managementPorts) or (vmNetworkSecurityGroupCustomRule['SourceAddressPrefix'] == '*' and vmNetworkSecurityGroupCustomRule['DestinationAddressPrefix'] == '*') or (vmNetworkSecurityGroupCustomRule['DestinationPortRange'] == '*')):
+							nsgWeakCustomRules.append(vmNetworkSecurityGroupCustomRule['Direction'] + "-" + vmNetworkSecurityGroupCustomRule['Name'])
+					elif vmNetworkSecurityGroupCustomRule['Direction'] == 'Outbound' and vmNetworkSecurityGroupCustomRule['Access'] == 'Allow' and ((vmNetworkSecurityGroupCustomRule['SourceAddressPrefix'] == '*' and vmNetworkSecurityGroupCustomRule['DestinationAddressPrefix'] == '*') or (vmNetworkSecurityGroupCustomRule['DestinationPortRange'] == '*')):
 						nsgWeakCustomRules.append(vmNetworkSecurityGroupCustomRule['Direction'] + "-" + vmNetworkSecurityGroupCustomRule['Name'])
-				elif vmNetworkSecurityGroupCustomRule['Direction'] == 'Outbound' and vmNetworkSecurityGroupCustomRule['Access'] == 'Allow' and ((vmNetworkSecurityGroupCustomRule['SourceAddressPrefix'] == '*' and vmNetworkSecurityGroupCustomRule['DestinationAddressPrefix'] == '*') or (vmNetworkSecurityGroupCustomRule['DestinationPortRange'] == '*')):
-					nsgWeakCustomRules.append(vmNetworkSecurityGroupCustomRule['Direction'] + "-" + vmNetworkSecurityGroupCustomRule['Name'])
 
 	return nsgWeakCustomRules
 
